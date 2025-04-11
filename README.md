@@ -6,6 +6,7 @@
 3. Project 2 (Monthly historical performance of the Bitcoin index (in USD) between August 2011 and January 2025)
 5. Project 3 (Coming soon)
 
+```
 .
 ├── Project 1
 │   ├── (added soon).pdf
@@ -24,3 +25,4 @@
 │   │   └── (coming soon).csv
 ├── LICENSE
 └── README.md
+```
