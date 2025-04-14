@@ -1,0 +1,137 @@
+---
+title: "Project 2"
+author: "Rakyan Adhikara"
+date: '2025-04-11'
+output: html_document
+---
+
+## Installing libraries
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(GGally)
+library(car)
+library(stats)
+library(tidyverse)
+library(readxl)
+library(leaps)
+library(dplyr)
+library(TSA)
+library(tseries)
+library(forecast)
+options(scipen = 999)
+```
+
+## Reading Dataset
+
+```{r}
+df_raw <- read.csv("chart.csv")
+head(df_raw)
+```
+
+# Data Exploration and Analysis
+
+## Summary of dataset
+
+```{r}
+summary(df_raw)
+```
+
+
+### ACF Plot for orginal dataset
+
+```{r}
+par(mar=c(5,4,4,2),
+    cex.main=1,
+    cex.lab=1,
+    cex.axis=1)
+
+# ACF Plot
+acf(df_raw)
+```
+
+## Data Pre-processing
+
+### Converting dataset to time series data
+
+```{r pressure, echo=FALSE}
+# Creating the time series data
+bitc_ts <- ts(df_raw$Bitcoin,
+              frequency = 12, # Set the frequency to 12 since it is monthly
+              start = c(2011, 8), # Start on August 2011
+              end = c(2025, 2)) # End at January 2025
+bitc_ts
+```
+
+### Time series plot
+
+```{r, fig.width=10, fig.height=10}
+# Time series plot
+# par(mar=c(5,4,4,2),
+#     cex.main=1,
+#     cex.lab=1,
+#     cex.axis=1)
+
+plot(bitc_ts,
+     main = "Time series plot of monthly historical performance of the Bitcoin index (in USD)",
+     ylab='US$',
+     xlab='Time',
+     ylim=c(0,130000000),
+     type='o',
+     col="#D55E00",
+     )
+```
+
+### Scatter plot for Time Series data
+
+```{r, fig.width=10, fig.height=10}
+# par(mar=c(5,4,4,2),
+#     cex.main=1,
+#     cex.lab=1,
+#     cex.axis=1)
+
+plot(y=bitc_ts,
+     x=zlag(bitc_ts),
+     main = "Scatter plot of monthly historical performance of the Bitcoin index (in USD)",
+     ylab='US$',
+     xlab='Previous in US$',
+     col="#D55E00")
+```
+
+### Correlation of the Time Series Dataset
+
+```{r}
+bitc_corr_y <- bitc_ts # Read the data into bitc_corr_y
+bitc_corr_x <- zlag(bitc_ts) # Generate first lag of the series into bitc_corr_x
+bitc_corr_idx <- 2:length(bitc_corr_x)  # Create an index to get rid of the first NA value in x if applicable
+cor(bitc_corr_y[bitc_corr_idx],bitc_corr_x[bitc_corr_idx]) # Calculate correlation between numerical values in x and y
+```
+
+### ADF Test on Time Series dataset
+
+```{r}
+# ADF test on Time Series dataset
+adf.test(bitc_ts)
+```
+
+```{r fig.width=10, fig.height=10}
+qqnorm(y = bitc_ts, main = "QQ plot of the Bitcoin Price", col = "blue")
+qqline(y = bitc_ts, col = 2, lwd = 1, lty = 2)
+shapiro.test(bitc_ts)
+# p-value = 0.0001 
+```
+
+
+```{r fig.width=10, fig.height=10}
+# Create the ACF plot: slowly decay trend
+acf(bitc_ts, main = "ACF of Bitcoin Price Performance Time Series")
+
+# convert the ACF plot into a numerical representation
+# Calculate ACF values for the Arctic Sea Ice Extent Time Series
+bitc_ts_acf_values <- acf(bitc_ts, plot = FALSE)
+
+# Print the ACF values
+bitc_ts_acf_values$acf
+```
+
