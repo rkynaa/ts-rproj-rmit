@@ -20,6 +20,8 @@ library(dplyr)
 library(TSA)
 library(tseries)
 library(forecast)
+library(astsa)
+library(lmtest)
 options(scipen = 999)
 ```
 
@@ -41,7 +43,7 @@ summary(df_raw)
 
 ### ACF Plot for orginal dataset
 
-```{r}
+```{r, fig.width=10, fig.height=7}
 par(mar=c(5,4,4,2),
     cex.main=1,
     cex.lab=1,
@@ -66,7 +68,7 @@ bitc_ts
 
 ### Time series plot
 
-```{r, fig.width=10, fig.height=10}
+```{r, fig.width=10, fig.height=7}
 # Time series plot
 # par(mar=c(5,4,4,2),
 #     cex.main=1,
@@ -85,7 +87,7 @@ plot(bitc_ts,
 
 ### Scatter plot for Time Series data
 
-```{r, fig.width=10, fig.height=10}
+```{r, fig.width=10, fig.height=7}
 # par(mar=c(5,4,4,2),
 #     cex.main=1,
 #     cex.lab=1,
@@ -115,7 +117,7 @@ cor(bitc_corr_y[bitc_corr_idx],bitc_corr_x[bitc_corr_idx]) # Calculate correlati
 adf.test(bitc_ts)
 ```
 
-```{r fig.width=10, fig.height=10}
+```{r fig.width=10, fig.height=7}
 qqnorm(y = bitc_ts, main = "QQ plot of the Bitcoin Price", col = "blue")
 qqline(y = bitc_ts, col = 2, lwd = 1, lty = 2)
 shapiro.test(bitc_ts)
@@ -123,7 +125,7 @@ shapiro.test(bitc_ts)
 ```
 
 
-```{r fig.width=10, fig.height=10}
+```{r fig.width=10, fig.height=7}
 # Create the ACF plot: slowly decay trend
 acf(bitc_ts, main = "ACF of Bitcoin Price Performance Time Series")
 
@@ -135,3 +137,268 @@ bitc_ts_acf_values <- acf(bitc_ts, plot = FALSE)
 bitc_ts_acf_values$acf
 ```
 
+```{r, fig.width=10, fig.height=7}
+# large first lag in the pacf
+pacf(bitc_ts, main = "PACF of Bitcoin Price Performance Time Series")
+
+# convert the ACF plot into a numerical representation
+# Calculate PACF values for the Arctic Sea Ice Minimum Extent Time Series
+bitc_ts_pacf_values <- pacf(bitc_ts, plot = FALSE)
+# Print the PACF values
+bitc_ts_pacf_values$acf
+```
+
+```{r}
+adf.test(bitc_ts)
+# p-value = 0.9375: non-stationary
+```
+
+
+```{r}
+summary(bitc_ts)
+```
+
+```{r}
+bitc_ts_log <- log(bitc_ts)
+bitc_ts_diff <- diff(bitc_ts_log)
+```
+
+```{r, fig.width=10}
+plot(bitc_ts_diff, main = "Differenced Log Bitcoin Time Series", ylab = "Differenced log(Bitcoin)", col = "darkgreen")
+```
+
+```{r}
+bitc_ts_scaled <- bitc_ts / 1e6
+```
+
+```{r, fig.width=10}
+bitc_ts_yw <- BoxCox.ar(y = bitc_ts, method = "yule-walker")
+title(main = "Log-likelihood versus the values of lambda for Bitcoin Price")
+
+BC$ci # Values of the first and third vertical lines
+
+# To find the lambda value of the middle vertical line
+bitc_ts_yw_lambda <- bitc_ts_yw$lambda[which(max(bitc_ts_yw$loglike) == bitc_ts_yw$loglike)]
+bitc_ts_yw_lambda
+```
+
+
+```{r}
+# Apply Box-Cox transformation using the optimal lambda value 
+bitc_ts_bc <- ((bitc_ts^bitc_ts_yw_lambda) - 1) / bitc_ts_yw_lambda
+
+# Set the output file and dimensions (width, height) in pixels
+png("bitc_ts_bc.png", width = 1200, height = 600)
+
+# Set up the layout for side-by-side plots
+par(mfrow = c(1, 2))
+
+# Create a time series plot of the original data
+plot(bitc_ts,
+     type = "l",
+     col = "black",
+     main = "Original Bitcoin Price Performance",
+     xlab = "Year",
+     ylab = "Price (US$)")
+
+# Create a time series plot of the Box-Cox transformed data
+plot(bitc_ts_bc,
+     type = "l",
+     col = "blue",
+     xlim = c(2011, 2025),
+     ylim = c(0, 100),
+     main = "Box-Cox transformation Bitcoin Price Performance",
+     xlab = "Year",
+     ylab = "Box-Cox transformation Price (US$)")
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+```{r Transformation improve normality?}
+qqnorm(y = bitc_ts_bc, main = "QQ plot of Bitcoin Price Performance", col = "blue")
+qqline(y = bitc_ts_bc, col = 2, lwd = 1, lty = 2)
+shapiro.test(bitc_ts_bc)
+```
+
+
+```{r, fig.width=10}  
+# First Difference 
+bitc_ts_fdiff <- diff(bitc_ts, differences = 1)
+
+# Set the output file and dimensions (width, height) in pixels
+png("bitc_ts_fdiff.png", width = 1200, height = 600)
+
+# Set up the layout for side-by-side plots
+par(mfrow = c(1, 2))
+# Create a time series plot of the original data
+plot(bitc_ts,
+     type = "l",
+     col = "black",
+     main = "Original Bitcoin Price Performance Time Series",
+     xlab = "Year",
+     ylab = "Price (US$)")
+
+# Create a time series plot of the first differenced data
+plot(bitc_ts_fdiff,
+     type = "l",
+     col = "blue",
+     main = "First Differenced Bitcoin Price Performance Time Series",
+     xlab = "Year",
+     ylab = "Differenced Price (US$)")
+
+# Reset the layout
+#par(mfrow = c(1, 1))
+```
+
+
+```{r Stationary Tests}
+suppressWarnings({
+  adf <- adf.test(bitc_ts_fdiff, alternative = "stationary")
+  pp <- pp.test(bitc_ts_fdiff)
+  kpss <- kpss.test(bitc_ts_fdiff, null = "Level")
+})
+
+# Print the test results without the warnings
+adf
+pp
+kpss
+```
+
+
+```{r, fig.width=10}
+# Plot the ACF of the first differenced time series
+acf(bitc_ts_fdiff, main = "ACF First Difference")
+# Plot the PACF of the first differenced time series
+pacf(bitc_ts_fdiff, main = "PACF First Difference")
+# {ARIMA(2,1,2), ARIMA(3,1,1), ARIMA(4,1,1), ARIMA(5,1,2)}
+```
+
+
+
+```{r}
+# EACF
+eacf(bitc_ts_fdiff, ar.max = 10, ma.max = 10)
+# {ARIMA(0,1,1), ARIMA(1,1,1), ARIMA(1,1,2), ARIMA(2,1,1), ARIMA(2,1,2), ARIMA(5,1,0), ARIMA(3,1,2)}
+```
+
+```{r}
+res_ols = armasubsets(y=bitc_ts_fdiff,nar=10,nma=10,y.name='p',ar.method='ols')
+plot(res_ols)
+# {ARIMA(2,1,2), ARIMA(5,1,2), ARIMA(5,1,0)}
+```
+
+```{r}
+res_burg = armasubsets(y=bitc_ts_fdiff,nar=10,nma=10,y.name='p',ar.method='burg')
+plot(res_burg)
+# {ARIMA(0,1,7), ARIMA(0,1,8), ARIMA(0,1,9), ARIMA(1,1,9)}
+```
+
+
+```{r}
+fit_arima_models <- function(time_series, arima_orders) {
+  models <- list()
+  for (order in arima_orders) {
+    model <- arima(time_series, order = order, method = 'CSS-ML')
+    coef_test <- coeftest(model)
+    aic_score <- AIC(model)
+    bic_score <- BIC(model)
+    models[[paste("ARIMA(", paste(order, collapse = ","), ")", sep = "")]] <- list(model = model, coef_test = coef_test, AIC = aic_score, BIC = bic_score)
+  }
+  return(models)
+}
+
+# Define the list of ARIMA models
+arima_orders <- list(
+  c(0,1,1), c(0,1,7), c(0,1,8), c(0,1,9),
+  c(1,1,1), c(1,1,2), c(1,1,9), c(2,1,1),
+  c(2,1,2), c(3,1,1), c(3,1,2), c(4,1,1),
+  c(5,1,0), c(5,1,2)
+)
+
+bitc_ts_models <- fit_arima_models(bitc_ts, arima_orders)
+
+# Accessing the models and their coefficient tests, AIC and BIC scores:
+for (model_name in names(bitc_ts_models)) {
+  cat("Model:", model_name, "\n")
+  cat("Coefficient test:\n")
+  print(bitc_ts_models[[model_name]]$coef_test)
+  cat("AIC:", bitc_ts_models[[model_name]]$AIC, "\n")
+  cat("BIC:", bitc_ts_models[[model_name]]$BIC, "\n\n")
+}
+```
+
+
+```{r "ME", "RMSE", "MAE", "MPE", "MAPE", "MASE", "ACF1" scores}
+# Function to fit ARIMA models and compute accuracy
+fit_arima_models <- function(data, arima_orders) {
+  models <- list()
+  accuracy_measures <- list()
+  
+  for (order in arima_orders) {
+    model <- Arima(data, order = order, method = 'CSS-ML')
+    models[[paste0("ARIMA(", paste(order, collapse = ","), ")")]] <- model
+    accuracy_measures[[paste0("ARIMA(", paste(order, collapse = ","), ")")]] <- accuracy(model)[1:7]
+  }
+  
+  df_accuracy <- data.frame(do.call(rbind, accuracy_measures))
+  colnames(df_accuracy) <- c("ME", "RMSE", "MAE", "MPE", "MAPE", "MASE", "ACF1")
+  
+  return(df_accuracy)
+}
+
+# Define the list of ARIMA models
+arima_orders <- list(
+  c(0,1,1), c(0,1,7), c(0,1,8), c(0,1,9),
+  c(1,1,1), c(1,1,2), c(1,1,9), c(2,1,1),
+  c(2,1,2), c(3,1,1), c(3,1,2), c(4,1,1),
+  c(5,1,0), c(5,1,2)
+)
+
+# Call the function with your data and the list of ARIMA models
+accuracy_results <- fit_arima_models(bitc_ts, arima_orders)
+print(accuracy_results)
+
+```
+# We found ARIMA(2,1,1) model with MAPE of 17.29140 (17.29%) is the most promissing one for Diagnostic Checking
+
+```{r, fig.width=10}
+# Fit the ARIMA model
+model.221.CSSML <- arima(bitc_ts, order = c(2, 2, 1), method = 'CSS-ML')
+model.221.CSSMLRes <- rstandard(model.221.CSSML)
+
+# Set up the multi-panel plot layout
+par(mfrow = c(2, 2))
+
+# Time series plot of standardized residuals
+plot(model.221.CSSMLRes, xlab = 'Time', ylab = 'Standardized Residuals', type = 'o',
+     main = "Time series plot of standardized residuals", col = "blue")
+
+# Histogram of standardized residuals
+hist(model.221.CSSMLRes, ylab = 'Standardized Residuals',
+     main = "Histogram of standardized residuals", col = "blue")
+
+# QQ plot of standardized residuals
+qqnorm(model.221.CSSMLRes, main = "QQ plot of standardized residuals.", col = "blue")
+qqline(model.221.CSSMLRes, col = 2, lwd = 1, lty = 2)
+
+# ACF plot of standardized residuals
+acf(model.221.CSSMLRes, main = "ACF plot of standardized residuals.")
+
+```
+
+```{r autocorrelation test}
+Box.test(model.112.CSSMLRes, type = "Ljung-Box")
+```
+
+```{r normality test}
+shapiro.test(model.112.CSSMLRes)
+```
+
+
+```{r Forecasting consecutive 10 years}
+model.112.CSSMLA = Arima(arctic_sea_ice_ts,order=c(1,1,2),method='CSS-ML')
+model.112.CSSMLAfrc = forecast::forecast(model.112.CSSMLA, h = 10)
+plot(model.112.CSSMLAfrc)
+model.112.CSSMLAfrc
+```
