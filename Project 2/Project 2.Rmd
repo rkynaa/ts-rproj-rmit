@@ -364,41 +364,41 @@ print(accuracy_results)
 
 ```{r, fig.width=10}
 # Fit the ARIMA model
-model.221.CSSML <- arima(bitc_ts, order = c(2, 2, 1), method = 'CSS-ML')
-model.221.CSSMLRes <- rstandard(model.221.CSSML)
+model.211.CSSML <- arima(bitc_ts, order = c(2, 1, 1), method = 'CSS-ML')
+model.211.CSSMLRes <- rstandard(model.221.CSSML)
 
 # Set up the multi-panel plot layout
 par(mfrow = c(2, 2))
 
 # Time series plot of standardized residuals
-plot(model.221.CSSMLRes, xlab = 'Time', ylab = 'Standardized Residuals', type = 'o',
+plot(model.211.CSSMLRes, xlab = 'Time', ylab = 'Standardized Residuals', type = 'o',
      main = "Time series plot of standardized residuals", col = "blue")
 
 # Histogram of standardized residuals
-hist(model.221.CSSMLRes, ylab = 'Standardized Residuals',
+hist(model.211.CSSMLRes, ylab = 'Standardized Residuals',
      main = "Histogram of standardized residuals", col = "blue")
 
 # QQ plot of standardized residuals
-qqnorm(model.221.CSSMLRes, main = "QQ plot of standardized residuals.", col = "blue")
-qqline(model.221.CSSMLRes, col = 2, lwd = 1, lty = 2)
+qqnorm(model.211.CSSMLRes, main = "QQ plot of standardized residuals.", col = "blue")
+qqline(model.211.CSSMLRes, col = 2, lwd = 1, lty = 2)
 
 # ACF plot of standardized residuals
-acf(model.221.CSSMLRes, main = "ACF plot of standardized residuals.")
+acf(model.211.CSSMLRes, main = "ACF plot of standardized residuals.")
 
 ```
 
 ```{r autocorrelation test}
-Box.test(model.112.CSSMLRes, type = "Ljung-Box")
+Box.test(model.211.CSSMLRes, type = "Ljung-Box")
 ```
 
 ```{r normality test}
-shapiro.test(model.112.CSSMLRes)
+shapiro.test(model.211.CSSMLRes)
 ```
 
 
 ```{r Forecasting consecutive 10 years}
-model.112.CSSMLA = Arima(arctic_sea_ice_ts,order=c(1,1,2),method='CSS-ML')
-model.112.CSSMLAfrc = forecast::forecast(model.112.CSSMLA, h = 10)
-plot(model.112.CSSMLAfrc)
-model.112.CSSMLAfrc
+model.211.CSSMLA = Arima(bitc_ts,order=c(2,1,1),method='CSS-ML')
+model.211.CSSMLAfrc = forecast::forecast(model.211.CSSMLA, h = 24)
+plot(model.211.CSSMLAfrc)
+model.211.CSSMLAfrc
 ```
