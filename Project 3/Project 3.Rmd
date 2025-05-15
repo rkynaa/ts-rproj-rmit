@@ -1,0 +1,722 @@
+---
+title: "Final Assessment"
+author: "Rakyan Adhikara"
+date: '2025-05-15'
+output: html_document
+---
+
+## Installing libraries
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(GGally)
+library(car)
+library(stats)
+library(tidyverse)
+library(readxl)
+library(leaps)
+library(dplyr)
+library(TSA)
+library(tseries)
+library(astsa)
+library(lmtest)
+
+library(forecast)
+library(fUnitRoots)
+library(fGarch)
+library(rugarch)
+library(tseries)
+library(FinTS)
+options(scipen = 999)
+```
+
+## Reading Dataset
+
+```{r}
+df_monthly_raw <- read.csv("Monthly_Avg_USD.csv")
+head(df_monthly_raw)
+```
+
+# Data Exploration and Analysis
+
+## Summary of dataset
+
+```{r}
+summary(df_monthly_raw)
+```
+
+
+### ACF Plot for orginal dataset
+
+```{r, fig.width=10, fig.height=7}
+par(mar=c(5,4,4,2),
+    cex.main=1,
+    cex.lab=1,
+    cex.axis=1)
+
+# ACF Plot
+acf(df_monthly_raw)
+```
+
+## Descriptive Analysis
+
+### Converting dataset to time series data
+
+```{r pressure, echo=FALSE}
+# Creating the time series data
+gold_ts <- ts(df_monthly_raw$USD,
+              frequency = 12, # Set the frequency to 12 since it is monthly
+              start = c(1978, 1), # Start on August 2011
+              end = c(2025, 4)) # End at January 2025
+gold_ts
+```
+
+### Time series plot
+
+```{r, fig.width=10, fig.height=7}
+# Time series plot
+
+plot(gold_ts,
+     main = "Time series plot of monthly Gold Price per Troy Ounce (in USD)",
+     ylab='US$',
+     xlab='Time',
+     ylim=c(0,4000),
+     col="#D55E00",
+     )
+```
+
+### Scatter plot for Time Series data
+
+```{r, fig.width=10, fig.height=7}
+plot(y=gold_ts,
+     x=zlag(gold_ts),
+     main = "Scatter plot of monthly Gold Price per Troy Ounce (in USD)",
+     ylab='US$',
+     xlab='Previous in US$',
+     col="#D55E00")
+```
+
+### Correlation of the Time Series Dataset
+
+```{r}
+# Read the data into bitc_corr_y
+gold_corr_y <- gold_ts
+
+# Generate first lag of the series into bitc_corr_x
+gold_corr_x <- zlag(gold_ts) 
+
+# Create an index to get rid of the first NA value in x if applicable
+gold_corr_idx <- 2:length(gold_corr_x)  
+
+# Calculate correlation between numerical values in x and y
+cor(gold_corr_y[gold_corr_idx],gold_corr_x[gold_corr_idx]) 
+```
+
+### Normality Test
+
+```{r fig.width=10, fig.height=7}
+# QQ Plot
+qqnorm(y = gold_ts,
+       main = "QQ plot of the Bitcoin Price", 
+       col = "blue")
+qqline(y = gold_ts, 
+       col = 2, 
+       lwd = 1, 
+       lty = 2)
+
+# Shapiro Test
+shapiro.test(gold_ts)
+# p-value = 0.0001 
+```
+
+
+#### ADF Test on Time Series dataset
+
+```{r}
+# ADF test on Time Series dataset
+adf.test(gold_ts)
+# P-Value = 0.99 -> Non-Stationary
+```
+
+```{r fig.width=10, fig.height=7}
+# Create the ACF plot: slowly decay trend
+acf(gold_ts, main = "ACF of Gold Price Performance Time Series")
+
+# convert the ACF plot into a numerical representation
+# Calculate ACF values for the Gold Price Performance Time Series
+gold_ts_acf_values <- acf(gold_ts, plot = FALSE)
+
+# Print the ACF values
+gold_ts_acf_values$acf
+```
+
+```{r, fig.width=10, fig.height=7}
+# large first lag in the pacf
+pacf(gold_ts, main = "PACF of Gold Price Performance Time Series")
+
+# convert the ACF plot into a numerical representation
+# Calculate PACF values for the Gold Price Performance Time Series
+gold_ts_pacf_values <- pacf(gold_ts, plot = FALSE)
+
+# Print the PACF values
+gold_ts_pacf_values$acf
+```
+
+```{r}
+summary(gold_ts)
+```
+
+## Data Transformation
+
+### Box-Cox Transformation
+
+```{r, fig.width=10}
+# Transformation using yule-walker
+gold_ts_yw <- BoxCox.ar(y = gold_ts, method = "yule-walker")
+
+title(main = "Log-likelihood versus the values of lambda for Bitcoin Price")
+
+# Values of the first and third vertical lines
+gold_ts_yw$ci
+
+# To find the lambda value of the middle vertical line
+gold_ts_yw_lambda <- gold_ts_yw$lambda[which(max(gold_ts_yw$loglike) == gold_ts_yw$loglike)]
+gold_ts_yw_lambda
+```
+
+```{r}
+# Apply Box-Cox transformation using the optimal lambda value 
+gold_ts_bc <- ((gold_ts^gold_ts_yw_lambda) - 1) / gold_ts_yw_lambda
+
+# Set the output file and dimensions (width, height) in pixels
+png("gold_ts_bc.png", width = 1200, height = 600)
+
+# Set up the layout for side-by-side plots
+par(mfrow = c(1, 2))
+
+# Create a time series plot of the original data
+plot(gold_ts,
+     main = "Original Gold Price Performance",
+     xlab = "Year",
+     ylab = "Price (US$)",
+     type = "l",
+     col = "black")
+
+# Create a time series plot of the Box-Cox transformed data
+plot(gold_ts_bc,
+     main = "Box-Cox transformation Gold Price Performance",
+     xlab = "Year",
+     ylab = "Box-Cox transformation Price (US$)",
+     type = "l",
+     col = "blue",
+     xlim = c(2011, 2025),
+     ylim = c(0, 100))
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+#### Normality Evaluation for Box-Cox Transformation
+
+```{r, fig.width=10}
+# QQ Plot
+qqnorm(y = gold_ts_bc, 
+       main = "QQ plot of Gold Price Performance after Box Cox Transformation", 
+       col = "blue")
+qqline(y = gold_ts_bc, 
+       col = 2, 
+       lwd = 1, 
+       lty = 2)
+
+# Shapiro Test
+shapiro.test(gold_ts_bc)
+```
+
+#### Stationary Evaluation for Box-Cox Transformation
+
+```{r}
+# ADF Test
+adf.test(gold_ts_bc, alternative = "stationary")
+
+# PP Test
+pp.test(gold_ts_bc)
+
+# KPSS Test
+kpss.test(gold_ts_bc, null = "Level")
+```
+
+### Log-Difference Transfomration
+
+```{r}
+gold_ts_log <- log(gold_ts)
+gold_ts_logdiff <- diff(gold_ts_log)
+
+# Set the output file and dimensions (width, height) in pixels
+png("gold_ts_logdiff.png", width = 1200, height = 600)
+
+# Set up the layout for side-by-side plots
+
+par(mfrow = c(1, 2))
+# Create a time series plot of the original data
+plot(gold_ts,
+     main = "Original Gold Price Performance Time Series",
+     xlab = "Year",
+     ylab = "Price (US$)",
+     type = "l",
+     col = "black")
+
+# Create a time series plot of the log differenced data
+plot(gold_ts_logdiff,
+     main = "Log Differenced Gold Price Performance Time Series",
+     xlab = "Year",
+     ylab = "Differenced Price (US$)",
+     type = "l",
+     col = "blue")
+```
+
+```{r, fig.width=10}
+plot(gold_ts_logdiff, main = "Differenced Log Bitcoin Time Series", ylab = "Differenced log(Bitcoin)", col = "darkgreen")
+```
+
+#### Normality Evaluation for Log-Difference Transformation
+
+```{r}
+# Shapiro Test
+shapiro.test(gold_ts_logdiff)
+```
+
+#### Stationary Evaluation for Log-Difference Transformation
+
+```{r}
+# ADF Test
+adf.test(gold_ts_logdiff, alternative = "stationary")
+
+# PP Test
+pp.test(gold_ts_logdiff)
+
+# KPSS Test
+kpss.test(gold_ts_logdiff, null = "Level")
+```
+
+### First-Difference transfomration
+
+```{r, fig.width=10}  
+# First Difference 
+gold_ts_fdiff <- diff(gold_ts, differences = 1)
+
+# Set the output file and dimensions (width, height) in pixels
+png("gold_ts_fdiff.png", 
+    width = 1200, 
+    height = 600)
+
+# Set up the layout for side-by-side plots
+par(mfrow = c(1, 2))
+
+# Create a time series plot of the original data
+plot(gold_ts,
+     main = "Original Gold Price Performance Time Series",
+     xlab = "Year",
+     ylab = "Price (US$)",
+     type = "l",
+     col = "black")
+
+# Create a time series plot of the first differenced data
+plot(gold_ts_fdiff,
+     main = "First Differenced Gold Price Performance Time Series",
+     xlab = "Year",
+     ylab = "Differenced Price (US$)",
+     type = "l",
+     col = "blue")
+
+```
+
+#### Normality Evaluation for First-Difference Transformation
+
+```{r}
+shapiro.test(gold_ts_fdiff)
+```
+
+#### Stationary Evaluation for First-Difference Transformation
+
+```{r}
+# ADF Test
+adf.test(gold_ts_fdiff, 
+         alternative = "stationary")
+
+# PP Test
+pp.test(gold_ts_fdiff)
+
+# KPSS Test
+kpss.test(gold_ts_fdiff, 
+          null = "Level")
+```
+
+Here’s the full version of your **stationarity and normality comparison table** formatted for **R Markdown**, along with interpretation points you can directly copy into your `.Rmd` report:
+
+### 📊 Stationarity and Normality Test Summary (R Markdown Format)
+
+#### Table: Summary of Stationarity and Normality Tests
+
+| Transformation     | ADF (p-value) | PP (p-value) | KPSS (p-value) | Stationarity Verdict     | Shapiro-Wilk W | Normality Verdict          |
+|--------------------|---------------|--------------|----------------|---------------------------|----------------|-----------------------------|
+| **Box-Cox**        | 0.6469        | 0.8212       | 0.0100         | ❌ Not Stationary         | 0.89064        | ❌ Not Normal               |
+| **First Difference** | 0.0100      | 0.0100       | 0.0100         | ⚠️ Partial (KPSS fails)   | 0.87381        | ❌ Not Normal               |
+| **Log Difference** | 0.0100        | 0.0100       | 0.1000         | ✅ Stationary             | 0.90285        | ⚠️ Closest to Normality     |
+
+#### 📌 Interpretation
+
+* **Box-Cox Transformation**:
+
+  * The ADF and PP tests failed to reject the null hypothesis, while the KPSS test rejected the null of stationarity, confirming it is **non-stationary**.
+  * It also fails the Shapiro-Wilk normality test with a low W statistic (0.89064), indicating a **non-normal distribution**.
+
+* **First Differencing**:
+
+  * Both ADF and PP tests suggest stationarity, but the KPSS test indicates a lack of level stationarity.
+  * Its normality result is the worst among the three (W = 0.87381), showing strong **non-normality**.
+
+* **Log Differencing**:
+
+  * Passes **all stationarity tests**: ADF and PP reject unit root, and KPSS does not reject stationarity.
+  * Although the Shapiro-Wilk test still rejects normality, it yields the **highest W statistic (0.90285)**, meaning it is **closest to normality**.
+  * This transformation is also conceptually meaningful for financial data, as it represents **monthly returns**.
+  * **Selected as the optimal transformation** for modeling.
+
+```{r, fig.width=10}
+# Plot the ACF of the Log differenced time series
+acf(gold_ts_logdiff, 
+    main = "ACF Log Difference")
+
+# Plot the PACF of the Log differenced time series
+pacf(gold_ts_logdiff, 
+     main = "PACF Log Difference")
+```
+
+```{r}
+# EACF
+eacf(gold_ts_logdiff, 
+     ar.max = 10, 
+     ma.max = 10)
+```
+
+```{r}
+bic_ols = armasubsets(y = gold_ts_logdiff,
+                      nar = 10,
+                      nma = 10,
+                      y.name = 'p',
+                      ar.method ='ols')
+plot(bic_ols)
+```
+```{r}
+bic_yw = armasubsets(y = gold_ts_logdiff,
+                     nar = 10,
+                     nma = 10,
+                     y.name ='p',
+                     ar.method ='yule-walker')
+plot(bic_yw)
+```
+
+```{r}
+bic_burg = armasubsets(y = gold_ts_logdiff,
+                       nar = 10,
+                       nma = 10, 
+                       y.name='p',
+                       ar.method='burg')
+plot(bic_burg)
+```
+
+### ARIMA Models: ARIMA(1,0,1), ARIMA(2,0,1), ARIMA(1,0,2)
+
+```{r}
+fit_arima_models <- function(time_series, arima_orders) {
+  models <- list()
+  for (order in arima_orders) {
+    model <- arima(time_series,
+                   order = order,
+                   method = 'CSS-ML')
+    coef_test <- coeftest(model)
+    aic_score <- AIC(model)
+    bic_score <- BIC(model)
+    models[[paste("ARIMA(",
+                  paste(order,
+                        collapse = ","),
+                  ")",
+                  sep = "")]] <- list(model = model,
+                                      coef_test = coef_test,
+                                      AIC = aic_score,
+                                      BIC = bic_score)
+  }
+  return(models)
+}
+
+# Define the list of ARIMA models
+arima_list <- list(
+  c(1,0,1),
+  c(1,0,2), 
+  c(2,0,1)
+)
+
+gold_ts_models <- fit_arima_models(gold_ts_logdiff, arima_list)
+
+# Accessing the models and their coefficient tests, AIC and BIC scores:
+for (model_name in names(gold_ts_models)) {
+  cat("Model:", model_name, "\n")
+  cat("Coefficient test:\n")
+  print(gold_ts_models[[model_name]]$coef_test)
+  cat("AIC:", gold_ts_models[[model_name]]$AIC, "\n")
+  cat("BIC:", gold_ts_models[[model_name]]$BIC, "\n\n")
+}
+```
+
+
+```{r}
+# Function to fit ARIMA models and compute accuracy
+calc_arima_acc <- function(data, arima_orders) {
+  models <- list()
+  accuracy_measures <- list()
+  
+  for (order in arima_orders) {
+    model <- Arima(data,
+                   order = order,
+                   method = 'CSS-ML')
+    models[[paste0("ARIMA(",
+                   paste(order,
+                         collapse = ","),
+                   ")")]] <- model
+    accuracy_measures[[paste0("ARIMA(",
+                              paste(order,
+                                    collapse = ","),
+                              ")")]] <- accuracy(model)[1:7]
+  }
+  
+  df_accuracy <- data.frame(do.call(rbind, accuracy_measures))
+  colnames(df_accuracy) <- c("ME", "RMSE", "MAE", "MPE", "MAPE", "MASE", "ACF1")
+  
+  return(df_accuracy)
+}
+
+# Define the list of ARIMA models
+arima_list <- list(
+  c(1,0,1),
+  c(1,0,2), 
+  c(2,0,1)
+)
+
+# Call the function with your data and the list of ARIMA models
+acc_res <- calc_arima_acc(gold_ts_logdiff, arima_list)
+print(acc_res)
+
+```
+
+### 📊 **ARIMA Model Evaluation Summary**
+
+| Model            | AIC          | BIC          | Sig. Coefficients            | RMSE        | MAE         | ACF1 (Residual) | Verdict        |
+| ---------------- | ------------ | ------------ | ---------------------------- | ----------- | ----------- | --------------- | -------------- |
+| **ARIMA(1,0,1)** | **-1952.56** | **-1935.20** | ✅ All significant (p < 0.05) | 0.04294     | 0.03003     | **-0.00193**    | ✅ Best Overall |
+| ARIMA(1,0,2)     | -1950.78     | -1929.08     | ❌ None (except intercept)    | 0.04293     | **0.03000** | -0.00039        | ❌ Weaker       |
+| ARIMA(2,0,1)     | -1950.85     | -1929.15     | ❌ None (except intercept)    | **0.04293** | 0.03003     | -0.00038        | ❌ Weaker       |
+
+---
+
+### Interpretation
+
+* ✅ **ARIMA(1,0,1)**:
+
+  * **All coefficients statistically significant**
+  * Lowest AIC and BIC values → best balance between model fit and complexity
+  * RMSE and MAE are comparable to other models
+  * Residual autocorrelation (ACF1 = -0.00193) is very low, indicating good white-noise behavior
+
+* ⚠️ **ARIMA(1,0,2)** and **ARIMA(2,0,1)**:
+
+  * No statistically significant AR/MA terms
+  * Similar accuracy, but **higher AIC/BIC**
+  * No gain in performance despite added complexity
+
+---
+
+### ✅ Final Conclusion
+
+The **ARIMA(1,0,1)** model is the most suitable for modeling the log-differenced monthly gold price series. It exhibits statistically significant coefficients, the lowest AIC and BIC values, and good predictive accuracy (RMSE = 0.04294, MAE = 0.03003). Residuals appear uncorrelated, indicating an adequate fit. More complex models such as ARIMA(1,0,2) and ARIMA(2,0,1) do not offer improvements in model quality or forecasting accuracy and include non-significant parameters.
+
+```{r}
+fit_sarima_models <- function(time_series, sarima_orders, seasonal_period) {
+  models <- list()
+  
+  for (order_set in sarima_orders) {
+    arima_order <- order_set$order
+    seasonal_order <- order_set$seasonal
+    
+    model <- Arima(time_series,
+                   order = arima_order,
+                   seasonal = list(order = seasonal_order, period = seasonal_period),
+                   method = "ML")
+    
+    coef_test <- coeftest(model)
+    aic_score <- AIC(model)
+    bic_score <- BIC(model)
+    
+    model_name <- paste0(
+      "SARIMA(", paste(arima_order, collapse = ","), ")(",
+      paste(seasonal_order, collapse = ","), ")[", seasonal_period, "]"
+    )
+    
+    models[[model_name]] <- list(model = model,
+                                 coef_test = coef_test,
+                                 AIC = aic_score,
+                                 BIC = bic_score)
+  }
+  
+  return(models)
+}
+
+# Define list of SARIMA (p,d,q)(P,D,Q)[s] orders to test
+sarima_list <- list(
+  list(order = c(1,0,1), seasonal = c(0,0,1)),
+  list(order = c(2,0,1), seasonal = c(0,0,1)),
+  list(order = c(1,0,1), seasonal = c(1,0,0)),
+  list(order = c(1,0,1), seasonal = c(1,0,1))
+)
+
+# Fit all models
+gold_ts_sarima_models <- fit_sarima_models(gold_ts_logdiff, sarima_list, seasonal_period = 12)
+
+# Output results
+for (model_name in names(gold_ts_sarima_models)) {
+  cat("Model:", model_name, "\n")
+  cat("Coefficient test:\n")
+  print(gold_ts_sarima_models[[model_name]]$coef_test)
+  cat("AIC:", gold_ts_sarima_models[[model_name]]$AIC, "\n")
+  cat("BIC:", gold_ts_sarima_models[[model_name]]$BIC, "\n\n")
+}
+```
+
+```{r}
+# Function to fit SARIMA models and compute accuracy
+calc_sarima_acc <- function(data, sarima_orders, seasonal_period = 12) {
+  models <- list()
+  accuracy_measures <- list()
+  
+  for (order_set in sarima_orders) {
+    arima_order <- order_set$order
+    seasonal_order <- order_set$seasonal
+    
+    model <- Arima(data,
+                   order = arima_order,
+                   seasonal = list(order = seasonal_order, period = seasonal_period),
+                   method = "ML")
+    
+    model_name <- paste0("SARIMA(",
+                         paste(arima_order, collapse = ","),
+                         ")(",
+                         paste(seasonal_order, collapse = ","),
+                         ")[", seasonal_period, "]")
+    
+    models[[model_name]] <- model
+    accuracy_measures[[model_name]] <- accuracy(model)[1:7]
+  }
+  
+  df_accuracy <- data.frame(do.call(rbind, accuracy_measures))
+  colnames(df_accuracy) <- c("ME", "RMSE", "MAE", "MPE", "MAPE", "MASE", "ACF1")
+  
+  return(df_accuracy)
+}
+
+# Define SARIMA model configurations
+sarima_list <- list(
+  list(order = c(1,0,1), seasonal = c(0,0,1)),
+  list(order = c(2,0,1), seasonal = c(0,0,1)),
+  list(order = c(1,0,1), seasonal = c(1,0,0)),
+  list(order = c(1,0,1), seasonal = c(1,0,1))
+)
+
+# Run accuracy comparison
+sarima_acc_res <- calc_sarima_acc(gold_ts_logdiff, sarima_list, seasonal_period = 12)
+
+# View results
+print(sarima_acc_res)
+```
+
+### 📊 **SARIMA Model Comparison Table**
+
+| Model                         | AIC          | BIC          | Significant Coefs     | **RMSE**    | **MAE**     | **MASE**   | **ACF1 (Residual)** |
+| ----------------------------- | ------------ | ------------ | --------------------- | ----------- | ----------- | ---------- | ------------------- |
+| **SARIMA(1,0,1)(0,0,1)\[12]** | **-1952.26** | **-1930.56** | ✅ ar1, ma1, intercept | 0.04264     | 0.03001     | 0.7053     | -0.00219            |
+| SARIMA(2,0,1)(0,0,1)\[12]     | -1950.60     | -1924.55     | ❌ only intercept      | 0.04286     | 0.03001     | 0.7054     | -0.00027            |
+| SARIMA(1,0,1)(1,0,0)\[12]     | -1952.18     | -1930.48     | ✅ ar1, ma1, intercept | 0.04278     | 0.03002     | 0.7056     | -0.00242            |
+| **SARIMA(1,0,1)(1,0,1)\[12]** | -1951.36     | -1925.31     | ✅ all coefficients    | **0.04238** | **0.02994** | **0.7036** | **-0.00248**        |
+
+### 🧠 **Interpretation**
+
+#### ✅ **Model 1: SARIMA(1,0,1)(0,0,1)\[12]**
+
+* Strong model: significant coefficients for AR, MA, and intercept.
+* Best **AIC and BIC** — most parsimonious with good fit.
+* RMSE and MAE are slightly higher than the full seasonal model.
+* Residuals are low in autocorrelation.
+
+#### ✅ **Model 4: SARIMA(1,0,1)(1,0,1)\[12]**
+
+* All coefficients are significant.
+* **Best forecast accuracy**:
+
+  * Lowest **RMSE (0.04238)** and **MAE (0.02994)**
+  * Lowest **MASE (0.7036)**
+* Slightly worse AIC/BIC due to increased complexity
+* Residual autocorrelation is very low (best among all)
+
+### 🏆 **Final Recommendation: SARIMA(1,0,1)(1,0,1)\[12]**
+
+> While SARIMA(1,0,1)(0,0,1)\[12] has the best AIC and BIC, the full seasonal model **SARIMA(1,0,1)(1,0,1)\[12]** outperforms in terms of **forecast accuracy (RMSE, MAE, MASE)** and has **all coefficients statistically significant**. Residuals also exhibit the least autocorrelation. Therefore, SARIMA(1,0,1)(1,0,1)\[12] is selected as the most robust model for forecasting the log-differenced monthly gold price series.
+
+Here’s a detailed **head-to-head comparison** between your best ARIMA model (**ARIMA(1,0,1)**) and your best SARIMA model (**SARIMA(1,0,1)(1,0,1)\[12]**) across all key evaluation criteria.
+
+---
+
+### 📊 **ARIMA vs SARIMA: Model Comparison Table**
+
+| Criteria                     | **ARIMA(1,0,1)** | **SARIMA(1,0,1)(1,0,1)\[12]** | ✅ Best |
+| ---------------------------- | ---------------- | ----------------------------- | ------ |
+| **AIC**                      | **-1952.56**     | -1951.36                      | ARIMA  |
+| **BIC**                      | **-1935.20**     | -1925.31                      | ARIMA  |
+| **Significant Coefficients** | ✅ All            | ✅ All                         | Tie    |
+| **RMSE**                     | 0.04294          | **0.04238**                   | SARIMA |
+| **MAE**                      | 0.03003          | **0.02994**                   | SARIMA |
+| **MASE**                     | 0.7058           | **0.7036**                    | SARIMA |
+| **Residual ACF1**            | -0.00193         | **-0.00248**                  | SARIMA |
+| **Captures Seasonality**     | ❌ No             | ✅ Yes                         | SARIMA |
+
+---
+
+### 🧠 **Interpretation**
+
+* **ARIMA(1,0,1)** is:
+
+  * Simpler and more parsimonious (fewer parameters),
+  * Has the lowest AIC and BIC,
+  * Statistically sound and adequate in performance.
+
+* **SARIMA(1,0,1)(1,0,1)\[12]** is:
+
+  * Slightly more complex,
+  * Has marginally higher AIC/BIC (due to extra seasonal terms),
+  * BUT **outperforms in accuracy**: lower RMSE, MAE, MASE,
+  * Has better residual autocorrelation (closer to white noise),
+  * **Captures seasonal effects**, which ARIMA does not.
+
+
+### ✅ **Final Verdict**
+
+> Although ARIMA(1,0,1) provides the most parsimonious fit based on information criteria (AIC/BIC), the SARIMA(1,0,1)(1,0,1)\[12] model delivers **superior forecast accuracy** and better residual behavior while accounting for **seasonal dynamics**. Given these advantages, **SARIMA(1,0,1)(1,0,1)\[12] is selected as the final model** for forecasting monthly gold price returns.
+
+# Finding and Fitting ARCH and GARCH models
+
+```{r}
+# Plot squared returns to check volatility clustering
+plot(gold_ts_logdiff^2, type = 'l', main = "Squared Log Returns (Volatility Proxy)")
+
+# Perform ARCH effect test
+ArchTest(gold_ts_logdiff, lags = 12)
+```
+
