@@ -770,7 +770,7 @@ print(sarima_acc_res)
 | **Seasonal Terms Present**     | ❌ No             | ❌ No (seasonal syntax only)   | ⚖️ Tie   |
 
 
-### **Updated Insight: ARIMA vs SARIMA Final Comparison**
+### **Insight: ARIMA vs SARIMA Final Comparison**
 
 * **ARIMA(3,0,1)** and **SARIMA(3,0,1)(0,0,0)\[12]** are **statistically identical**:
 
@@ -792,79 +792,6 @@ plot(gold_ts_logdiff^2, type = 'l', main = "Squared Log Returns (Volatility Prox
 
 # Perform ARCH effect test
 ArchTest(gold_ts_logdiff, lags = 12)
-```
-
-```{r}
-# Define a basic GARCH(1,1) model
-garch_spec <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1,1)),
-                         mean.model = list(armaOrder = c(1,0), include.mean = TRUE),
-                         distribution.model = "norm")
-
-# Fit the model
-garch_fit <- ugarchfit(spec = garch_spec, data = gold_ts_logdiff)
-
-# Display results
-show(garch_fit)
-
-```
-
-```{r}
-fit_garch_models <- function(data, p_list = 0:2, q_list = 0:2) {
-  results <- list()
-  
-  for (p in p_list) {
-    for (q in q_list) {
-      model_name <- paste0("GARCH(", p, ",", q, ")")
-      
-      # Skip invalid models like GARCH(0,0)
-      if (p == 0 && q == 0) next
-      
-      spec <- ugarchspec(
-        variance.model = list(model = "sGARCH", garchOrder = c(p, q)),
-        mean.model = list(armaOrder = c(1, 0), include.mean = TRUE),
-        distribution.model = "norm"
-      )
-      
-      fit <- tryCatch({
-        ugarchfit(spec, data = data)
-      }, error = function(e) NULL)
-      
-      if (!is.null(fit)) {
-        results[[model_name]] <- list(
-          fit = fit,
-          AIC = infocriteria(fit)[1],
-          BIC = infocriteria(fit)[2]
-        )
-      } else {
-        message(model_name, " failed to converge.")
-      }
-    }
-  }
-  
-  return(results)
-}
-
-# Run the model fitting
-garch_results <- fit_garch_models(gold_ts_logdiff, p_list = 0:2, q_list = 0:2)
-
-# Print AIC/BIC of successful models
-for (model in names(garch_results)) {
-  cat(model, ": AIC =", garch_results[[model]]$AIC,
-      " BIC =", garch_results[[model]]$BIC, "\n")
-}
-
-
-```
-
-```{r}
-model_scores <- data.frame(
-  Model = names(garch_results),
-  AIC = sapply(garch_results, function(x) x$AIC),
-  BIC = sapply(garch_results, function(x) x$BIC)
-)
-
-model_scores <- model_scores[order(model_scores$AIC), ]
-print(model_scores)
 ```
 
 ```{r}
