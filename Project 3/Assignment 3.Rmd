@@ -2012,6 +2012,183 @@ legend("topleft",
 * However, the **rapid widening of the confidence interval** suggests that **SARIMA alone lacks robustness against volatility shocks**.
 * **Recommendation**: Use this as a baseline forecast but **consider the SARIMA + GARCH version** if volatility modeling and tighter uncertainty bands are desired.
 
+### Diagnostic Check
+
+#### For SARIMA-only
+
+```{r}
+# Replace 'best_model' with the actual name of your final fitted model
+# For example: sarima_best_post2010 or arima_final_model
+
+# 1. Residual Time Series Plot, ACF, PACF
+tsdisplay(residuals(sarima_best_post2010),
+          main = "Residuals Diagnostic: SARIMA(3,0,3)(1,0,0)[12]")
+
+# 2. Ljung-Box test for autocorrelation (white noise)
+Box.test(residuals(sarima_best_post2010),
+         lag = 12,
+         type = "Ljung-Box",
+         fitdf = length(sarima_best_post2010$coef))
+
+# 3. Standardized Residuals Plot
+plot(rstandard(sarima_best_post2010),
+     main = "Standardized Residuals",
+     ylab = "Standardized Value",
+     type = "l",
+     col = "#D55E00", lwd = 2)
+
+# 4. Histogram of Residuals
+hist(residuals(sarima_best_post2010),
+     main = "Histogram of Residuals",
+     col = "lightblue", breaks = 20)
+
+# 5. QQ Plot for Normality
+qqnorm(residuals(sarima_best_post2010))
+qqline(residuals(sarima_best_post2010), col = "red")
+
+# 6. Shapiro-Wilk Normality Test
+shapiro.test(residuals(sarima_best_post2010))
+```
+
+### ✅ Interpretation: SARIMA(3,0,3)(1,0,0)[12] Residual Diagnostics (Without GARCH)
+
+####🔹 Time Series Plot of Residuals:
+
+The residuals fluctuate around zero, with no apparent trend.
+
+However, mild clustering of volatility is visible — this suggests non-constant variance, hinting at potential heteroskedasticity.
+
+####🔹 ACF & PACF of Residuals:
+
+No significant autocorrelation — most spikes lie within the confidence bounds.
+
+Indicates that the SARIMA model has adequately captured the serial correlation structure of the data.
+
+####🔹 Box-Ljung Test:
+
+`X-squared = 6.1304, df = 4, p-value = 0.1896`
+
+The p-value > 0.05 suggests no significant autocorrelation in residuals — supporting the adequacy of the model in explaining the time-dependency.
+
+####🔹 Shapiro-Wilk Normality Test:
+
+`W = 0.99502, p-value = 0.8038`
+
+The high p-value means the residuals do not deviate significantly from normality — a positive sign for the model’s assumption of Gaussian noise.
+
+####🔹 Histogram & Q-Q Plot:
+
+Histogram is bell-shaped, close to normal.
+
+Q-Q plot points lie near the diagonal line — mild deviation at the tails, but overall, the residuals closely resemble a normal distribution.
+
+### 🧠 Conclusion
+
+The SARIMA(3,0,3)(1,0,0)[12] model performs well in terms of:
+
+* Whiteness (no autocorrelation),
+
+* Normality,
+
+* And mean dynamics.
+
+However, the visible clusters of volatility in the standardized residual plot hint at heteroskedasticity, which SARIMA alone cannot model. This is exactly why a GARCH model can be valuable as a follow-up — to handle that time-varying variance.
+
+```{r, fig.width=10}
+
+# Step 1: Extract residuals from the SARIMA model
+sarima_resid <- residuals(sarima_best_post2010)
+
+# Step 2: Define GARCH(1,0) specification
+garch_spec <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 0)),
+  mean.model = list(armaOrder = c(0, 0), include.mean = FALSE),
+  distribution.model = "norm"
+)
+
+# Step 3: Fit GARCH model to SARIMA residuals
+garch_fit <- ugarchfit(spec = garch_spec, data = sarima_resid)
+
+# Step 4: Extract standardized residuals
+garch_stdresid <- residuals(garch_fit, standardize = TRUE)
+
+# Step 5: Diagnostic plots
+par(mfrow = c(2, 2))
+
+# Time plot
+plot(garch_stdresid, type = "l", col = "#D55E00",
+     main = "Standardized Residuals (GARCH)",
+     ylab = "Value", xlab = "Time")
+
+# ACF
+acf(garch_stdresid, main = "ACF of GARCH Residuals")
+
+# Histogram
+hist(garch_stdresid, col = "#56B4E9", main = "Histogram of GARCH Residuals",
+     xlab = "Residuals", breaks = 20)
+
+# Q-Q Plot
+qqnorm(garch_stdresid, main = "Q-Q Plot of GARCH Residuals")
+qqline(garch_stdresid, col = "red")
+
+```
+
+
+### ✅ Residual Diagnostics: GARCH(1,0) Fitted on SARIMA Residuals
+
+#### 🔹 **Standardized Residuals (Time Series Plot)**
+
+* The residuals appear to be centered around zero with **constant variance**, unlike the SARIMA-only version which showed **volatility clustering**.
+* This indicates that the GARCH model successfully accounted for the **heteroskedasticity** in the residuals from SARIMA.
+
+---
+
+#### 🔹 **ACF of GARCH Residuals**
+
+* Most lags fall within the 95% confidence bounds, with **no significant autocorrelation**.
+* Suggests that **GARCH has removed the remaining structure** in the variance, leaving residuals that behave like white noise.
+
+---
+
+#### 🔹 **Histogram of GARCH Residuals**
+
+* The histogram looks **reasonably symmetric and bell-shaped**, suggesting approximate **normality**.
+* Still, a slightly **heavier tail** compared to perfect normality may remain, which is common in financial time series.
+
+---
+
+#### 🔹 **Q-Q Plot of GARCH Residuals**
+
+* Points lie **closely along the diagonal**, confirming that the residuals from the GARCH model are **approximately normally distributed**.
+* Minor deviations at the tails, but **far less pronounced** than the SARIMA-only case.
+
+---
+
+### 🧠 Conclusion
+
+The addition of GARCH to the SARIMA model has clearly improved the residual properties:
+
+| Diagnostic           | SARIMA Only                          | SARIMA + GARCH                      |
+| -------------------- | ------------------------------------ | ----------------------------------- |
+| **Variance**         | Heteroskedastic (clustering visible) | Stabilized (variance more constant) |
+| **ACF of Residuals** | No autocorrelation                   | Still no autocorrelation (good)     |
+| **Normality**        | Mostly normal (minor skew/kurtosis)  | Improved normality in tails         |
+| **Volatility**       | Not modeled                          | Explicitly captured with GARCH      |
+
+---
+
+### ✅ Why GARCH Was Important in This Case
+
+Even though SARIMA handled the **mean structure and autocorrelation** well, it couldn't model **time-varying volatility**, which is common in financial data like gold prices. The **SARIMA residuals showed signs of volatility clustering**, and adding GARCH allowed us to:
+
+* **Model conditional variance**, improving confidence interval calibration
+* **Stabilize the residuals**, leading to better statistical inferences
+* **Preserve white noise assumptions** with more robust residuals
+
+📌 **This is especially important when using the forecast to inform high-stakes financial decisions**, where underestimated volatility can lead to mispricing or risk underestimation.
+
+
+### Forecasting
 
 ```{r}
 # --- Fit the SARIMA model on the stationary log-differenced data ---
@@ -2063,6 +2240,17 @@ for (i in 2:10) {
   lower_ci_post2010[i] <- forecast_price_post2010[i] * exp(-1.96 * garch_volatility[i])
   upper_ci_post2010[i] <- forecast_price_post2010[i] * exp(1.96 * garch_volatility[i])
 }
+```
+
+```{r}
+forecast_price_post2010
+```
+
+```{r}
+lower_ci_post2010
+```
+```{r}
+upper_ci_post2010
 ```
 
 
