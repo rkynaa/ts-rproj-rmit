@@ -348,7 +348,7 @@ adf.test(gold_ts_post2010)
 
 ```{r fig.width=10, fig.height=7}
 # Create the ACF plot: slowly decay trend
-acf(gold_ts_post2010, main = "ACF of Gold Price Performance Time Series after 2010")
+acf(gold_ts_post2010, main = "ACF of Gold Price Performance Time Series from 2010")
 
 # convert the ACF plot into a numerical representation
 # Calculate ACF values for the Gold Price Performance Time Series
@@ -360,7 +360,7 @@ gold_post2010_ts_acf_values$acf
 
 ```{r, fig.width=10, fig.height=7}
 # large first lag in the pacf
-pacf(gold_ts_post2010, main = "PACF of Gold Price Performance Time Series before 2010")
+pacf(gold_ts_post2010, main = "PACF of Gold Price Performance Time Series from 2010")
 
 # convert the ACF plot into a numerical representation
 # Calculate PACF values for the Gold Price Performance Time Series
