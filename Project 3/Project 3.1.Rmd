@@ -1,0 +1,1266 @@
+---
+title: "Final Assessment"
+author: "Rakyan Adhikara"
+date: '2025-05-15'
+output: html_document
+---
+
+
+
+```{r setup, include=FALSE}
+## Installing libraries
+knitr::opts_chunk$set(echo = TRUE)
+
+suppressWarnings({
+  suppressPackageStartupMessages({
+  # library(ggplot2)
+  # library(GGally)
+  # library(car)
+  # library(stats)
+  # library(tidyverse)
+  # library(readxl)
+  # library(leaps)
+  # library(dplyr)
+  # library(TSA)
+  # library(tseries)
+  # library(astsa)
+  # library(lmtest)
+  
+  # library(forecast)
+  # library(fUnitRoots)
+  library(fGarch)
+  library(rugarch)
+  # library(tseries)
+  
+    
+  library(LSTS)
+  library(TSA)
+  library(forecast)
+  library(tseries)
+  library(lmtest)
+
+
+
+  })
+})
+
+
+source("seasonal_acf_pacf.R")
+
+
+```
+
+
+
+```{r}
+## Reading Dataset
+df_monthly_raw <- read.csv("Monthly_Avg_USD.csv")
+head(df_monthly_raw)
+```
+
+
+```{r}
+# Data Exploration and Analysis
+
+## Summary of dataset
+
+summary(df_monthly_raw)
+```
+
+
+```{r}
+#Missing values
+sum(is.na(df_monthly_raw))
+```
+
+
+```{r, fig.width=10, fig.height=7}
+
+### ACF Plot for orginal dataset
+#par(mar=c(5,4,4,2),
+#    cex.main=1,
+#    cex.lab=1,
+#    cex.axis=1)
+
+#par(mfrow=c(1,1))
+
+# ACF Plot
+acf(df_monthly_raw)
+```
+
+# 1. Descriptive Analysis
+```{r pressure, echo=FALSE}
+# Creating the time series data
+gold_ts <- ts(df_monthly_raw$USD,
+              frequency = 12, # Set the frequency to 12 since it is monthly
+              start = c(1978, 1), # Start on January 1978
+              end = c(2025, 4)) # End at January 2025
+##gold_ts
+```
+
+```{r}
+gold_ts_2005 <- window(gold_ts, start=c(2005, 1))
+gold_ts_2005
+```
+
+```{r}
+summary(gold_ts_2005)
+```
+
+
+```{r, fig.width=10, fig.height=7}
+# Time series plot
+
+plot(gold_ts_2005,
+     main = "Time series plot of monthly Gold Price per Troy Ounce (in USD)",
+     ylab='US$',
+     xlab='Time',
+     ylim=c(0,4000),
+     col="#D55E00",
+     )
+```
+
+```{r}
+decomposed <- decompose(gold_ts_2005)  # works with ts objects
+plot(decomposed)
+
+```
+
+```{r}
+library(seastests)
+
+# Example using QS test (for monthly data)
+qs(gold_ts_2005)
+
+
+```
+
+
+
+```{r, fig.width=10, fig.height=7}
+### Scatter plot for Time Series data
+plot(y=gold_ts_2005,
+     x=zlag(gold_ts_2005),
+     main = "Scatter plot of monthly Gold Price per Troy Ounce (in USD)",
+     ylab='US$',
+     xlab='Previous in US$',
+     col="#D55E00")
+```
+
+
+
+```{r}
+### Correlation of the Time Series Dataset
+# Read the data into bitc_corr_y
+gold_corr_y <- gold_ts_2005
+
+# Generate first lag of the series into bitc_corr_x
+gold_corr_x <- zlag(gold_ts_2005) 
+
+# Create an index to get rid of the first NA value in x if applicable
+gold_corr_idx <- 2:length(gold_corr_x)  
+
+# Calculate correlation between numerical values in x and y
+cor(gold_corr_y[gold_corr_idx],gold_corr_x[gold_corr_idx]) 
+```
+```{r}
+
+acf(gold_ts_2005, lag.max = 1, plot = FALSE)$acf[1]
+
+```
+
+
+
+```{r fig.width=10, fig.height=7}
+
+
+### Normality Test
+# QQ Plot
+qqnorm(y = gold_ts_2005,
+       main = "QQ plot of the Gold Price", 
+       col = "blue")
+qqline(y = gold_ts_2005, 
+       col = 2, 
+       lwd = 1, 
+       lty = 2)
+
+# Shapiro Test
+shapiro.test(gold_ts_2005)
+# p-value = 0.0001 
+```
+
+
+
+
+```{r}
+# ADF test on Time Series dataset
+suppressWarnings({adf.test(gold_ts_2005)})
+suppressWarnings({kpss.test(gold_ts_2005)})
+# P-Value = 0.99 -> Non-Stationary
+```
+
+```{r fig.width=10, fig.height=7}
+# Create the ACF plot: slowly decay trend
+par(mfrow=c(1,2))
+acf(gold_ts_2005, main = "ACF of Gold Price Time Series")
+pacf(gold_ts_2005, main = "PACF of Gold Price Time Series")
+
+par(mfrow=c(1,1))
+
+```
+```{r, fig.width=10}
+
+seasonal_acf(gold_ts_2005, main = "Seasonal ACF of Gold", lag=48)
+seasonal_pacf(gold_ts_2005, main = "Seasonal PACF of Gold", lag=48)
+
+```
+
+
+```{r, fig.width=10, fig.height=7}
+# convert the ACF plot into a numerical representation
+# Calculate ACF values for the Gold Price Performance Time Series
+gold_ts_acf_values <- acf(gold_ts_2005, plot = FALSE)
+
+# Print the ACF values
+gold_ts_acf_values$acf
+gold_ts_pacf_values <- pacf(gold_ts_2005, plot = FALSE)
+
+# Print the PACF values
+#gold_ts_pacf_values$acf
+```
+
+# 2. Transformations and Stationarity Testing
+```{r}
+plot_full_analysis <- function(original, transformed, title, fig_num_start = 1) {
+  
+  # 1 & 2: Plot original and transformed series
+  par(mfrow=c(1,2),
+  mar = c(5, 2, 3, 2),   # margins: bottom, left, top, right
+  cex.main = 1,          # title font size
+  cex.lab = 1,           # axis label font size
+  cex.axis = 1           # axis tick label font size
+)
+
+
+  plot(original, 
+       type = "l", 
+       col = "black",
+       main = paste("Original Gold Price Performance"),
+       ylab = "Price (US$)", 
+       xlab = "Year")
+ 
+  plot(transformed, 
+       type = "l", 
+       col = "blue",
+       main = paste(title),
+       ylab = "Value",
+       xlab = "Time")
+  
+  par(mfrow = c(1, 1))
+  
+    # QQ Plot
+  qqnorm(y = transformed, 
+         main = paste("QQ plot", title), 
+         col = "blue")
+  qqline(y = transformed, 
+         col = 2, 
+         lwd = 1, 
+         lty = 2)
+  
+  # Shapiro Test
+  print(shapiro.test(transformed))
+  
+    par(mfrow=c(1,2),
+  mar = c(5, 2, 3, 2),   # margins: bottom, left, top, right
+  cex.main = 0.85,          # title font size
+  cex.lab = 1,           # axis label font size
+  cex.axis = 1           # axis tick label font size
+  )
+  acf(transformed, main = paste("ACF of", title))
+  pacf(transformed, main = paste("PACF of", title))
+  par(mfrow = c(1, 1))
+  
+  
+
+  print(suppressWarnings(adf.test(transformed)))
+  print(suppressWarnings(kpss.test(transformed)))
+  print(suppressWarnings(pp.test(transformed)))
+}
+
+```
+
+
+### 1. Box Cox Transformation
+```{r, fig.width=10}
+# Box Cox Transformation using loglikelihood
+lambda <- BoxCox.lambda(gold_ts_2005, method = "loglik")
+gold_ts_boxcox <- BoxCox(gold_ts_2005, lambda)
+
+plot_full_analysis(gold_ts_2005, gold_ts_boxcox, "Box Cox Transformed Series", fig_num_start = 11)
+```
+
+
+```{r}
+lambda
+# quite close to zero which is log-transform
+```
+
+
+### 2. Log Transformation
+
+```{r, fig.width=10}
+gold_ts_log <- log(gold_ts_2005)
+plot_full_analysis(gold_ts_2005, gold_ts_log, "Log Transformated Series", fig_num_start = 15)
+
+```
+### 3. First Differencing
+
+```{r, fig.width=10}
+gold_ts_diff <- diff(gold_ts_2005, differences=1)
+plot_full_analysis(gold_ts_2005, gold_ts_diff, "First Differenced Series", fig_num_start = 18)
+```
+### 4. Second Differencing
+
+```{r, fig.width=10}
+gold_ts_diff2 <- diff(gold_ts_2005, differences=2)
+plot_full_analysis(gold_ts_2005, gold_ts_diff2, "Second Differenced Series", fig_num_start = 22)
+
+```
+
+### 5. Box Cox + First Differencing
+
+```{r, fig.width=10}
+gold_ts_boxcox_diff1 <- diff(gold_ts_boxcox, differences=1)
+plot_full_analysis(gold_ts_2005, gold_ts_boxcox_diff1, "Box Cox + First Differenced Series", fig_num_start = 22)
+
+```
+### 6. Log + First Differencing
+```{r, fig.width=10}
+gold_ts_log_diff1 <- diff(gold_ts_log, differences=1)
+plot_full_analysis(gold_ts_2005, gold_ts_log_diff1, "Log + First Differenced Series", fig_num_start = 22)
+```
+
+# 3. Model Specification
+### 1. ACF and PACF
+```{r, fig.width=10}
+# Plot the ACF of the Log differenced time series
+acf(gold_ts_log_diff1, 
+    main = "ACF Log Difference")
+
+# Plot the PACF of the Log differenced time series
+pacf(gold_ts_log_diff1, 
+     main = "PACF Log Difference")
+
+#ARIMA (2,0,2),
+```
+
+### 2. EACF
+```{r}
+# EACF
+eacf(gold_ts_log_diff1, 
+     ar.max = 10, 
+     ma.max = 10)
+
+#(0,1 0,2 1,1 1,2)
+```
+
+### 3. BIC
+```{r}
+bic_ols = armasubsets(y = gold_ts_log_diff1,
+                      nar = 10,
+                      nma = 10,
+                      y.name = 'p',
+                      ar.method ='ols')
+plot(bic_ols)
+
+# (1,3), (1,4), (4,3), (4,4)
+```
+
+
+```{r}
+
+bic_yw = armasubsets(y = gold_ts_log_diff1,
+                     nar = 10,
+                     nma = 10,
+                     y.name ='p',
+                     ar.method ='yule-walker')
+plot(bic_yw)
+
+# (10,7), (10,9)
+```
+
+```{r}
+bic_burg = armasubsets(y = gold_ts_log_diff1,
+                       nar = 10,
+                       nma = 10, 
+                       y.name='p',
+                       ar.method='burg')
+plot(bic_burg)
+
+# (10,7 10,9)
+```
+
+# 4. Parameter Estimation
+
+From set of possible ARIMA(p, d, q) models
+### 1. Fitting Models
+```{r}
+run_arima_model <- function(data, p, d, q) {
+  # Methods to use
+  methods <- c("ML", "CSS", "CSS-ML")
+  results <- list()  # Initialize an empty list 
+  
+  # Loop through all methods
+  for (method in methods) {
+    model_name <- paste0("ARIMA(", p, ",", d, ",", q, ")_", method)
+    
+    # Fit the ARIMA model for the current p, d, q and method
+    fit <- tryCatch({
+      Arima(data, order=c(p, d, q), method=method)
+    }, error = function(e) {
+      NULL  # Skip if model fails
+    })
+    
+    # If the model fits successfully, store the results
+    if (!is.null(fit)) {
+      coef_test <- coeftest(fit)
+      
+      # Print only the coefficient test results for each method
+      cat("\n--- Running", model_name, "---\n")
+      print(coef_test)
+      
+      # Store the results in the results list
+      results[[model_name]] <- list(model = fit, coeftest = coef_test)
+    } else {
+      cat("\nError: Model failed to fit for", model_name, "\n")
+    }
+  }
+  
+  return(results)
+}
+
+#ARIMA (0,0,1) (0,0,2) (1,0,1) (1,0,2) (1,0,3) (1,0,4) (4,0,3) (4,0,4) (10,0,7) (10,0,9)
+```
+
+### 2. Coeftest
+```{r}
+#ARIMA (0,0,1)
+m.arima.001 <- run_arima_model (gold_ts_log_diff1, 0,0,1)
+```
+
+```{r}
+#ARIMA (0,0,2)
+m.arima.002 <- run_arima_model (gold_ts_log_diff1, 0,0,2)
+```
+
+```{r}
+#ARIMA (1,0,1)
+m.arima.101 <- run_arima_model (gold_ts_log_diff1, 1,0,1)
+```
+
+```{r}
+#ARIMA (1,0,2)
+m.arima.102 <- run_arima_model (gold_ts_log_diff1, 1,0,2)
+```
+
+```{r}
+#ARIMA (1,0,3)
+m.arima.103 <- run_arima_model (gold_ts_log_diff1, 1,0,3)
+```
+#ARIMA (5,0,3) (5,0,6)
+
+```{r}
+#ARIMA (1,0,4)
+m.arima.104 <- run_arima_model (gold_ts_log_diff1, 1,0,4)
+```
+
+
+```{r}
+#ARIMA (4,0,3)
+m.arima.403 <- run_arima_model (gold_ts_log_diff1, 4,0,3)
+```
+
+
+```{r}
+#ARIMA (4,0,4)
+m.arima.404 <- run_arima_model (gold_ts_log_diff1, 4,0,4)
+```
+
+```{r}
+#ARIMA (10,0,7)
+m.arima.1007 <- run_arima_model (gold_ts_log_diff1, 10,0,7)
+```
+
+
+```{r}
+#ARIMA (10,0,9)
+m.arima.1009 <- run_arima_model (gold_ts_log_diff1, 10,0,9)
+```
+
+# 5. Goodness of Fit
+
+### 1. AIC and BIC 
+```{r}
+#ARIMA (0,0,1) (0,0,2) (1,0,1) (1,0,2) (1,0,3) (1,0,4) (4,0,3) (4,0,4) (10,0,7) (10,0,9)
+m.arima_list <- c(m.arima.001,m.arima.002, m.arima.101, m.arima.102, m.arima.103, m.arima.104, m.arima.403, m.arima.404, m.arima.1007, m.arima.1009)
+
+```
+
+```{r}
+get_model_criteria <- function(results_list, criterion = c("AIC", "BIC")) {
+  criterion <- match.arg(criterion)
+
+  model_scores <- data.frame(
+    Model = character(),
+    AIC = numeric(),
+    BIC = numeric(),
+    stringsAsFactors = FALSE
+  )
+
+  for (name in names(results_list)) {
+    model_info <- results_list[[name]]
+    
+    # Check model structure
+    if (!is.null(model_info$model) && !inherits(model_info$model, "try-error")) {
+      model <- model_info$model
+      
+      # Try to compute AIC/BIC safely
+      score <- tryCatch({
+        data.frame(
+          Model = name,
+          AIC = AIC(model),
+          BIC = BIC(model),
+          stringsAsFactors = FALSE
+        )
+      }, error = function(e) {
+        # Silently skip model if there's any error (e.g., CSS or failed fit)
+        NULL
+      })
+      
+      # Only add successful results
+      if (!is.null(score)) {
+        model_scores <- rbind(model_scores, score)
+      }
+    }
+  }
+
+  # Sort by selected criterion
+  model_scores <- model_scores[order(model_scores[[criterion]]), ]
+
+  return(model_scores)
+}
+
+```
+
+```{r}
+get_model_criteria(m.arima_list)
+```
+
+### 2. RMSE, MAE 
+
+```{r}
+get_model_accuracy <- function(results_list, sort.by = "RMSE", descending = FALSE) {
+  
+  # Check valid sort metric
+  valid_metrics <- c("RMSE", "MAE")
+  if (!(sort.by %in% valid_metrics)) {
+    stop(paste("Invalid sort.by metric. Choose one of:", paste(valid_metrics, collapse = ", ")))
+  }
+  
+  # Set up an empty data frame
+  accuracy_scores <- data.frame(
+    Model = character(),
+    RMSE = numeric(),
+    MAE = numeric(),
+    stringsAsFactors = FALSE
+  )
+  
+  for (name in names(results_list)) {
+    model <- results_list[[name]]$model
+    
+    if (!is.null(model) && !inherits(model, "try-error")) {
+      tryCatch({
+        acc <- accuracy(model)
+        acc_row <- data.frame(
+          Model = name,
+          RMSE = acc[1, "RMSE"],
+          MAE = acc[1, "MAE"],
+          stringsAsFactors = FALSE
+        )
+        accuracy_scores <- rbind(accuracy_scores, acc_row)
+      }, error = function(e) {
+        cat("Error with model", name, ":", e$message, "\n")
+      })
+    } else {
+      cat("Warning: Model", name, "is invalid or NULL, skipping...\n")
+    }
+  }
+  
+  # Set rownames
+  rownames(accuracy_scores) <- accuracy_scores$Model
+  accuracy_scores$Model <- NULL
+  
+  # Sort by chosen metric
+  accuracy_scores <- accuracy_scores[order(accuracy_scores[[sort.by]], decreasing = descending), ]
+  
+  return(accuracy_scores)
+}
+
+
+
+```
+
+```{r}
+get_model_accuracy(m.arima_list)
+```
+
+# 6. Residuals Analysis
+```{r}
+plot_ljung_box_pvalues <- function(residuals, lag_max = 36) {
+  pvals <- sapply(1:lag_max, function(lag) {
+    Box.test(residuals, lag = lag, type = "Ljung-Box")$p.value
+  })
+  
+  plot(1:lag_max, pvals, type = "p", pch = 1,  # 'pch=1' is hollow circle
+       xlab = "Lag", ylab = "p-value",
+       main = "Ljung-Box Test p-values",
+       ylim = c(0, 1))
+  abline(h = 0.05, col = "red", lty = 2, lwd = 2)  # red dashed line for significance
+}
+
+
+```
+
+```{r}
+check_residuals_diagnostics <- function(model, lag_max = 36) {
+  res <- residuals(model)
+  
+  # Residual plot
+  plot(res, main = "Residuals Time Series", ylab = "Residuals")
+  
+  # Histogram and Q-Q Plot
+  par(mfrow = c(1, 2))
+  hist(res, main = "Histogram of Residuals", xlab = "Residuals", col = "lightblue", border = "white")
+  qqnorm(res, main = "Q-Q Plot of Residuals")
+  qqline(res, col = 2)
+  
+  # ACF and PACF
+  par(mfrow = c(1, 2))
+  suppressWarnings(seasonal_acf(res, lag.max = lag_max, main = "Seasonal ACF of Residuals"))
+  suppressWarnings(seasonal_pacf(res, lag.max = lag_max, main = "Seasonal PACF of Residuals"))
+  
+  # Reset layout
+  par(mfrow = c(1, 1))
+  
+  # Ljung-Box p-value plot
+  plot_ljung_box_pvalues(res, lag_max)
+  
+  # Statistical tests
+  cat("Shapiro-Wilk Normality Test:\n")
+  print(shapiro.test(res))
+  
+  cat("\nLjung-Box Test (lag =", lag_max, "):\n")
+  print(Box.test(res, lag = lag_max, type = "Ljung-Box"))
+}
+
+```
+
+```{r}
+check_residuals_diagnostics(m.arima.403$`ARIMA(4,0,3)_CSS-ML`$model)
+```
+
+```{r}
+summary(m.arima.403$`ARIMA(4,0,3)_CSS-ML`$model)
+```
+
+
+
+# B. SEASONAL MODELLING
+```{r}
+gold_stl <- stl(gold_ts_2005, s.window = 12)
+plot(gold_stl)
+```
+
+
+```{r}
+
+analyze_seasonal_residuals <- function(ts_data, seasonal_order = c(0,1,0), seasonal_period = 12, lag_max = 36) {
+  
+  model <- Arima(ts_data, order = c(0,0,0),
+                 seasonal = list(order = seasonal_order, period = seasonal_period))
+  
+  res <- residuals(model)
+  
+  # Define a function to plot all graphs when called
+  plot_func <- function(){
+    par(mfrow = c(1, 2))
+    plot(ts_data, main = "Original Time Series", ylab = "Value", xlab = "Time")
+    plot(res, main = "Time Series Plot of Residuals", ylab = "Residuals", xlab = "Time")
+    
+    suppressWarnings(seasonal_acf(res, lag.max = lag_max, main = "Seasonal ACF of Residuals"))
+    suppressWarnings(seasonal_pacf(res, lag.max = lag_max, main = "Seasonal PACF of Residuals"))
+    
+    par(mfrow = c(1, 1))
+  }
+  
+  
+  # Return residuals + plotting function
+  return(list(
+    results = plot_func,
+    res = res
+  ))
+}
+
+
+```
+
+### 1. seasonal (0,1,0)
+```{r}
+
+m1seasonal.gold =  analyze_seasonal_residuals(gold_ts_log_diff1, c(0,1,0))
+m1seasonal.gold$results()
+```
+
+
+
+
+Since there is one significant lag in ACF , we set Q to 1 in the seasonal ARIMA, we don't take PACF since it shows a trend
+
+### 2. seasonal(0,1,1)
+```{r}
+m2seasonal.gold =  analyze_seasonal_residuals(gold_ts_log_diff1, c(0,1,1))
+m2seasonal.gold$results()
+
+```
+
+since no immediate significant seasonal lag, we conclude its now stationary
+
+```{r}
+suppressWarnings(adf.test(m2seasonal.gold$res))
+```
+
+```{r}
+eacf(m2seasonal.gold$res)
+
+# (0,1) (0,2), (1,1), (1,2), (2,1), (2,2), (2,3)
+```
+
+```{r}
+plot(armasubsets(y=m2seasonal.gold$res, nar = 10, nma=10, y.name='p', ar.method = 'ols'))
+
+# (10,7) (10,9)
+```
+
+```{r}
+plot(armasubsets(y=m2seasonal.gold$res, nar = 10, nma=10, y.name='p', ar.method = 'yule-walker'))
+
+# (10,7) (10,9)
+```
+
+```{r}
+plot(armasubsets(y=m2seasonal.gold$res, nar = 10, nma=10, y.name='p', ar.method = 'burg'))
+
+# (10,7) (10,9)
+```
+
+
+# 2. Fitting Model
+
+```{r}
+run_seasonal_arima_model <- function(data, p, d, q) {
+  # Methods to use
+  methods <- c("ML", "CSS", "CSS-ML")
+  results <- list()  # Initialize an empty list 
+  
+  # Loop through all methods
+  for (method in methods) {
+    model_name <- paste0("SARIMA(", p, ",", d, ",", q, ")_ (0,1,1)[12]", method)
+    
+    # Fit the ARIMA model for the current method with fixed seasonal order
+    fit <- tryCatch({
+      Arima(
+        data, 
+        order = c(p, d, q), 
+        seasonal = list(order = c(0, 1, 1), period = 12),
+        method = method
+      )
+    }, error = function(e) {
+      NULL  # Skip if model fails
+    })
+    
+    # If the model fits successfully, store and print results
+    if (!is.null(fit)) {
+      coef_test <- coeftest(fit)
+      
+      # Print only the coefficient test results for each method
+      cat("\n--- Running", model_name, "---\n")
+      print(coef_test)
+      
+      # Store the results
+      results[[model_name]] <- list(model = fit, coeftest = coef_test)
+    } else {
+      cat("\nError: Model failed to fit for", model_name, "\n")
+    }
+  }
+  
+  return(results)
+}
+
+```
+
+
+```{r}
+# (0,1)
+mseasonal001.gold = run_seasonal_arima_model(gold_ts_log_diff1, 0, 0, 1)
+```
+
+
+```{r}
+# (0,2)
+mseasonal002.gold = run_seasonal_arima_model(gold_ts_log_diff1, 0, 0, 2)
+```
+
+```{r}
+# (1,1)
+mseasonal101.gold = run_seasonal_arima_model(gold_ts_log_diff1, 1, 0, 1)
+```
+
+```{r}
+# (1,2)
+mseasonal102.gold = run_seasonal_arima_model(gold_ts_log_diff1, 1, 0, 2)
+```
+
+```{r}
+# (2,1)
+mseasonal201.gold = run_seasonal_arima_model(gold_ts_log_diff1, 2, 0, 1)
+```
+
+```{r}
+# (2,2)
+mseasonal202.gold = run_seasonal_arima_model(gold_ts_log_diff1, 2, 0, 2)
+```
+
+```{r}
+# (2,3)
+mseasonal203.gold = run_seasonal_arima_model(gold_ts_log_diff1, 2, 0, 3)
+```
+
+```{r}
+# (10,7)
+mseasonal1007.gold = run_seasonal_arima_model(gold_ts_log_diff1, 10, 0, 7)
+```
+
+```{r}
+# (10,9)
+mseasonal1009.gold = run_seasonal_arima_model(gold_ts_log_diff1, 10, 0, 9)
+```
+
+# 3. Goodness of Fit
+```{r}
+# (0,1) (0,2), (1,1), (1,2), (2,1), (2,2), (2,3), (10,7), (10,9)
+results_seasonal_list <- c(mseasonal001.gold, mseasonal002.gold, mseasonal101.gold, mseasonal102.gold, mseasonal201.gold, mseasonal202.gold, mseasonal203.gold, mseasonal1007.gold, mseasonal1009.gold)
+# Get models sorted by BIC
+get_model_criteria(results_seasonal_list , criterion = "BIC")
+```
+
+```{r}
+# Sort by RMSE ascending (default)
+get_model_accuracy(results_seasonal_list )
+```
+
+# 4. Residual Analysis
+```{r}
+check_residuals_diagnostics(mseasonal203.gold$`SARIMA(2,0,3)_ (0,1,1)[12]CSS-ML`$model)
+```
+
+# C. GARCH MODELLING
+```{r}
+r.gold_ts_2005 = diff(log(gold_ts_2005))*100
+plot(gold_ts_2005, type = "l", col = "blue", main = "Log-Differenced Gold Price", ylab = "Value", xlab = "Time")
+
+
+```
+
+```{r}
+McLeod.Li.test(y=gold_ts_2005, main ="McLeod - Li test statistics for Gold Price")
+```
+
+```{r}
+adf.test(r.gold_ts_2005)
+```
+
+Since we already have our best ARMA model from earlier we use that; ARMA (4,0,3)
+
+```{r}
+model403cssml <- arima (r.gold_ts_2005, order= c(4,0,3), method='CSS-ML')
+coeftest(model403cssml)
+```
+
+
+```{r}
+check_residuals_diagnostics(model403cssml)
+```
+
+```{r}
+abs.r.res.gold <- abs(residuals(model403cssml))
+sqr.r.res.gold <- residuals(model403cssml)^2
+```
+
+```{r}
+par(mfrow= c(1,2))
+acf(abs.r.res.gold, main = "ACF plot for absolute return series.", lag=48)
+
+pacf(abs.r.res.gold, main = "PACF plot for absolute return series.", lag=48)
+
+
+# max(p,q)= 1 from PACF plot and q = 1
+# max(p, q=1)=1, p=0,1
+
+# GARCH(0,1), GARCH(1,1)
+```
+
+
+```{r}
+eacf(abs.r.res.gold)
+
+# (0,4), (0,5) (1,4), (1,5), (2,4), (2,5), (3,2), (3,3), (3,4)
+
+# max(p,q) = 0 q=4 => max(p,q=4)=0 does not lead to any model
+# max(p,q) = 0 q=5 => max(p,q=5)=0 does not lead to any model
+# max(p,q) = 1 q=4 => max(p,q=4)=1 does not lead to any model
+# max(p,q) = 1 q=5 => max(p,q=5)=1 does not lead to any model
+# max(p,q) = 2 q=4 => max(p,q=4)=2 does not lead to any model
+# max(p,q) = 2 q=5 => max(p,q=5)=2 does not lead to any model
+# max(p,q) = 3 q=2 => max(p,q=2)=3 => p = 3 => GARCH(3,2)
+# max(p,q) = 3 q=3 => max(p,q=3)=3 => p = 0,1,2,3 => GARCH(0,3), GARCH(1,3), GARCH(2,3), GARCH(3,3) 
+# max(p,q) = 3 q=4 => max(p,q=4)=3 does not lead to any model
+
+# GARCH(3,2), GARCH(0,3), GARCH(1,3), GARCH(2,3), GARCH(3,3)
+```
+
+
+```{r}
+par(mfrow= c(1,2))
+acf(sqr.r.res.gold, main = "ACF plot for squared return series.")
+
+pacf(sqr.r.res.gold, main = "PACF plot for squared return series.")
+
+# max(p,q)= 2 from PACF plot and q = 3
+# max(p, q=3)=2 => does not lead to any model
+```
+
+```{r}
+eacf(sqr.r.res.gold)
+
+# (0,4), (0,5), (1,1), (1,2), (2,2), (2,3), (3,3), (3,4)
+
+# max(p,q) = 0 q=4 => max(p,q=4)=0 does not lead to any model
+# max(p,q) = 0 q=5 => max(p,q=5)=0 does not lead to any model
+# max(p,q) = 1 q=1 => max(p,q=1)=1 => p = 0,1 => GARCH(0,1), GARCH(1,1)
+# max(p,q) = 1 q=2 => max(p,q=2)=1 does not lead to any model
+# max(p,q) = 2 q=2 => max(p,q=2)=2 => p = 0,1,2 => GARCH(0,2), GARCH(1,2), GARCH(2,2)
+# max(p,q) = 2 q=3 => max(p,q=3)=2 does not lead to any model
+# max(p,q) = 3 q=3 => max(p,q=3)=3 => p = 0,1,2,3 => GARCH(0,3), GARCH(1,3), GARCH(2,3), GARCH(3,3)
+# max(p,q) = 3 q=4 => max(p,q=4)=3 does not lead to any model
+
+# GARCH(0,1), GARCH(1,1), GARCH(0,2), GARCH(1,2), GARCH(2,2), GARCH(0,3), GARCH(1,3), GARCH(2,3), GARCH(3,3)
+```
+
+
+```{r}
+# GARCH(0,1)
+model_403_01 <- fGarch::garchFit(~arma(5,3)+garch(1,0),
+                                 data=r.gold_ts_2005, trace=F)
+summary(model_403_01)
+```
+
+
+```{r}
+# GARCH(1,1)
+model_403_11 <- fGarch::garchFit(~arma(4,3)+garch(1,1),
+                                 data=r.gold_ts_2005, trace=F)
+summary(model_403_11)
+```
+
+
+```{r}
+# GARCH(0,2)
+model_403_02 <- fGarch::garchFit(~arma(4,3)+garch(2,0),
+                                 data=r.gold_ts_2005, trace=F)
+summary(model_403_02)
+
+```
+
+```{r}
+# GARCH(1,2)
+model_403_12 <- fGarch::garchFit(~arma(4,3)+garch(2,1),
+                                 data=r.gold_ts_2005, trace=F)
+summary(model_403_12)
+```
+
+```{r}
+# GARCH(2,2)
+model_403_22 <- fGarch::garchFit(~arma(4,3)+garch(2,2),
+                                 data=r.gold_ts_2005, trace=F)
+summary(model_403_22)
+```
+
+```{r}
+# GARCH(0,3)
+model_403_03 <- fGarch::garchFit(~arma(4,3)+garch(3,0),
+                                 data=r.gold_ts_2005, trace=F)
+summary(model_403_03)
+```
+
+```{r}
+# GARCH(1,3)
+model_403_13 <- fGarch::garchFit(~arma(4,3)+garch(3,1),
+                                 data=r.gold_ts_2005, trace=F)
+summary(model_403_13)
+```
+
+```{r}
+# GARCH(2,3)
+model_403_23 <- fGarch::garchFit(~arma(4,3)+garch(3,2),
+                                 data=r.gold_ts_2005, trace=F)
+summary(model_403_23)
+```
+
+
+```{r}
+# GARCH(3,2)
+model_403_32 <- fGarch::garchFit(~arma(4,3)+garch(2,3),
+                                 data=r.gold_ts_2005, trace=F)
+summary(model_403_32)
+```
+
+```{r}
+# GARCH(3,3)
+model_403_33 <- fGarch::garchFit(~arma(4,3)+garch(3,3),
+                                 data=r.gold_ts_2005, trace=F)
+summary(model_403_33)
+```
+
+```{r}
+# GARCH(0,1), GARCH(1,1), GARCH(0,2), GARCH(1,2), GARCH(2,2), GARCH(0,3), GARCH(1,3), GARCH(2,3), GARCH(3,2), GARCH(3,3)
+df <- data.frame(
+  Model = c("ARMA(4,3) + GARCH(0,1)",
+            "ARMA(4,3) + GARCH(1,1)",
+            "ARMA(4,3) + GARCH(0,2)",
+            "ARMA(4,3) + GARCH(1,2)",
+            "ARMA(4,3) + GARCH(2,2)",
+            "ARMA(4,3) + GARCH(0,3)",
+            "ARMA(4,3) + GARCH(1,3)",
+            "ARMA(4,3) + GARCH(2,3)",
+            "ARMA(4,3) + GARCH(3,2)",
+            "ARMA(4,3) + GARCH(3,3)"),
+  AIC = c(model_403_01@fit$ics[1],
+          model_403_11@fit$ics[1],
+          model_403_02@fit$ics[1],
+          model_403_12@fit$ics[1],
+          model_403_22@fit$ics[1],
+          model_403_03@fit$ics[1],
+          model_403_13@fit$ics[1],
+          model_403_23@fit$ics[1],
+          model_403_32@fit$ics[1],
+          model_403_33@fit$ics[1]),
+  BIC = c(model_403_01@fit$ics[2],
+          model_403_11@fit$ics[2],
+          model_403_02@fit$ics[2],
+          model_403_12@fit$ics[2],
+          model_403_22@fit$ics[2],
+          model_403_03@fit$ics[2],
+          model_403_13@fit$ics[2],
+          model_403_23@fit$ics[2],
+          model_403_32@fit$ics[2],
+          model_403_33@fit$ics[2])
+)
+
+df <- df[order(df$BIC, decreasing = FALSE), ]
+print(df)
+
+
+```
+
+## Residual analysis
+```{r}
+check_residuals_diagnostics_fgarch <- function(model, lag_max = 36) {
+  # Extract standardized residuals from fGarch model
+  res <- residuals(model, standardize = TRUE)
+  
+  # Plot residuals time series
+  plot(res, type = "l", main = "Residuals Time Series", ylab = "Standardized Residuals")
+
+  
+  # Histogram and Q-Q plot
+  par(mfrow = c(1, 2))
+  hist(res, main = "Histogram of Residuals", xlab = "Residuals", col = "lightblue", border = "white")
+  qqnorm(res, main = "Q-Q Plot of Residuals")
+  qqline(res, col = 2)
+  
+  # ACF and PACF plots
+  par(mfrow = c(1, 2))
+  suppressWarnings(acf(res, lag.max = lag_max, main = "ACF of Residuals"))
+  suppressWarnings(pacf(res, lag.max = lag_max, main = "PACF of Residuals"))
+  
+  # Reset layout
+  par(mfrow = c(1, 1))
+  
+  # Plot Ljung-Box test p-values using your custom function
+  plot_ljung_box_pvalues(res, lag_max)
+  
+  # Statistical tests output
+  cat("Shapiro-Wilk Normality Test:\n")
+  print(shapiro.test(res))
+  
+  cat("\nLjung-Box Test (lag =", lag_max, "):\n")
+  print(Box.test(res, lag = lag_max, type = "Ljung-Box"))
+}
+
+```
+
+```{r}
+check_residuals_diagnostics_fgarch(model_403_12)
+```
+
+## Compare all best models
+
+```{r}
+arima_css_ml <- Arima(gold_ts_log_diff1, order = c(4,0,3), method = "CSS-ML")
+summary(arima_css_ml)
+```
+
+
+```{r}
+library(forecast)
+library(fGarch)
+
+# Fit models
+arima_css_ml <- Arima(gold_ts_log_diff1, order = c(4,0,3), method = "CSS-ML")
+sarima_cssml <- Arima(gold_ts_log_diff1, 
+                      order = c(2,0,3), 
+                      seasonal = list(order = c(0,1,1), period = 12),
+                      method = "CSS-ML")
+garch_model <- garchFit(~ arma(4, 3) + garch(2, 1), data = gold_ts_log_diff1, trace = FALSE)
+
+
+acc_arima_ml <- accuracy(fitted(arima_css_ml), gold_ts_log_diff1)[1,]
+acc_sarima <- accuracy(fitted(sarima_cssml), gold_ts_log_diff1)[1, ]
+acc_garch <- accuracy(fitted(garch_model), gold_ts_log_diff1)[1, ]
+
+#AIC = c(AIC(arima_css_ml), AIC(sarima_cssml), garch_model@fit$ics["AIC"])
+
+results <- data.frame(
+  Model = c("ARIMA(4,0,3)_CSS_ML", "SARIMA(2,0,3)(0,1,1)[12]_CSS-ML", "GARCH(1,2)+ARMA(4,3)"),
+  AIC = c(AIC(arima_css_ml), AIC(sarima_cssml), garch_model@fit$ics["AIC"]),
+  BIC = c(BIC(arima_css_ml), BIC(sarima_cssml), garch_model@fit$ics["BIC"]),
+  RMSE = c(acc_arima_ml["RMSE"], acc_sarima["RMSE"], acc_garch["RMSE"]),
+  MAE = c(acc_arima_ml["MAE"], acc_sarima["MAE"], acc_garch["MAE"])
+)
+
+print(results)
+
+```
+
+
+# D. FORECASTING
+
+```{r}
+plot_forecast_original_scale <- function(original_ts, log_diff_model, h = 10) {
+  require(forecast)
+
+  # 1. Forecast
+  fc <- forecast(log_diff_model, h = h)
+
+  # 2. Get last log price
+  last_log_price <- log(tail(original_ts, 1))
+
+  # 3. Forecast in log-level
+  log_fc_mean <- cumsum(as.numeric(fc$mean)) + as.numeric(last_log_price)
+  log_fc_lower <- cumsum(as.numeric(fc$lower[, 2])) + as.numeric(last_log_price)
+  log_fc_upper <- cumsum(as.numeric(fc$upper[, 2])) + as.numeric(last_log_price)
+
+  # 4. Convert to original price scale
+  price_fc_mean <- exp(log_fc_mean)
+  price_fc_lower <- exp(log_fc_lower)
+  price_fc_upper <- exp(log_fc_upper)
+
+  # 5. Time setup
+  freq <- frequency(original_ts)
+  end_time <- end(original_ts)
+
+  fc_time <- seq(end_time[1] + (end_time[2] / freq),
+                 by = 1 / freq,
+                 length.out = h)
+
+  ts_price_fc_mean <- ts(price_fc_mean, start = fc_time[1], frequency = freq)
+  ts_price_fc_lower <- ts(price_fc_lower, start = fc_time[1], frequency = freq)
+  ts_price_fc_upper <- ts(price_fc_upper, start = fc_time[1], frequency = freq)
+
+  # 6. Plot
+  ts.plot(original_ts, ts_price_fc_mean, ts_price_fc_lower, ts_price_fc_upper,
+          col = c("black", "blue", "red", "red"),
+          lty = c(1, 1, 2, 2), lwd = c(1, 2, 1, 1),
+          main = "Forecast on Original Price Scale",
+          ylab = "Price")
+
+  legend("topleft",
+         legend = c("Original", "Forecast", "95% CI"),
+         col = c("black", "blue", "red"),
+         lty = c(1, 1, 2), lwd = c(1, 2, 1), bty = "n")
+}
+
+```
+
+```{r}
+# Fit ARIMA using CSS method (or replace with "ML" or "CSS-ML" if preferred)
+m1.arima.gold_ts <- Arima(gold_ts_log_diff1, order = c(4, 0, 3), method = "CSS-ML")
+
+# Plot forecast in original price scale
+plot_forecast_original_scale(gold_ts_2005, m1.arima.gold_ts, h = 10)
+
+
+```
+
+```{r}
+library(forecast)
+
+# Helper to subset time series from a start year (adjust if monthly/quarterly)
+subset_ts_from_year <- function(ts_data, start_year) {
+  start_time <- start(ts_data)
+  freq <- frequency(ts_data)
+  
+  # Extract time info
+  start_year_ts <- floor(start_time[1])  # year part
+  start_period <- start_time[2]          # sub-year period (month, quarter)
+  
+  # Calculate index for new start
+  new_start <- c(start_year, 1)
+  
+  window(ts_data, start = new_start)
+}
+
+```
+
+
+
+```{r}
+years <- c(2010, 2020, 2024)
+h <- 10  # forecast horizon
+
+for (yr in years) {
+  subset_data <- subset_ts_from_year(gold_ts, yr)
+  
+  # Log and difference transform on subset
+  gold_ts_log <- log(subset_data)
+  gold_ts_log_diff1 <- diff(gold_ts_log, differences = 1)
+  
+  # Fit ARIMA with CSS-ML method
+  model_arima <- Arima(gold_ts_log_diff1, order = c(4,0,2), method = "CSS-ML")
+  
+  # Plot forecast on original scale
+  plot_forecast_original_scale(subset_data, model_arima, h = h)
+}
+
+```
+
